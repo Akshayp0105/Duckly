@@ -1,5 +1,4 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -12,10 +11,31 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+/*
+// Paste these rules in Firebase Console → Firestore → Rules:
+// rules_version = '2';
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//     match /shares/{code} {
+//       allow read, write: if true;
+//     }
+//   }
+// }
+//
+// Firebase Storage Rules:
+// rules_version = '2';
+// service firebase.storage {
+//   match /b/{bucket}/o {
+//     match /shares/{allPaths=**} {
+//       allow read, write: if true;
+//     }
+//   }
+// }
+*/
+
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-export { app, auth, db, storage };
+export { app, db, storage };

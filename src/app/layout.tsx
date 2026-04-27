@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { Toaster } from "react-hot-toast";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -22,21 +22,20 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={cn("min-h-screen bg-background font-sans antialiased flex flex-col", inter.variable)}>
-        <AuthProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="dark"
-            themes={["dark", "gray", "white"]}
-            enableSystem={false}
-            storageKey="anyshare-theme"
-          >
-            <Navbar />
-            <main className="flex-1 flex flex-col">
-              {children}
-            </main>
-            <Footer />
-          </ThemeProvider>
-        </AuthProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          themes={["dark", "gray", "white"]}
+          enableSystem={false}
+          storageKey="anyshare-theme"
+        >
+          <Navbar />
+          <main className="flex-1 flex flex-col">
+            {children}
+          </main>
+          <Footer />
+          <Toaster position="bottom-center" />
+        </ThemeProvider>
       </body>
     </html>
   );

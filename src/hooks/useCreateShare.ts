@@ -2,24 +2,24 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { doc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore"
 import { db } from "@/lib/firebase"
-import { useAuth } from "@/contexts/AuthContext"
+import toast from "react-hot-toast"
 
 export function useCreateShare() {
   const [isCreating, setIsCreating] = useState(false)
   const router = useRouter()
-  const { user } = useAuth()
 
   const createShare = async () => {
-    if (!user) return
     if (isCreating) return
     
     setIsCreating(true)
     try {
-      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-      let code = ""
-      for (let i = 0; i < 6; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length))
+      let sessionId = localStorage.getItem("anyshare_session_id")
+      if (!sessionId) {
+        sessionId = crypto.randomUUID()
+        localStorage.setItem("anyshare_session_id", sessionId)
       }
+
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase()
 
       // 24 hours from now
       const expiresAt = new Date()
@@ -27,7 +27,7 @@ export function useCreateShare() {
 
       await setDoc(doc(db, "shares", code), {
         code,
-        ownerId: user.uid,
+        ownerId: sessionId,
         createdAt: serverTimestamp(),
         expiresAt: Timestamp.fromDate(expiresAt),
         items: []
@@ -37,6 +37,7 @@ export function useCreateShare() {
       router.push(`/${code}`)
     } catch (error) {
       console.error("Error creating share:", error)
+      toast.error("⚠ Something went wrong")
       setIsCreating(false)
     }
   }

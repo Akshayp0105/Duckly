@@ -4,13 +4,37 @@ import Link from "next/link";
 import { ArrowRight, Share2, Shield, Zap, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCreateShare } from "@/hooks/useCreateShare";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function Home() {
   const [lastShareCode, setLastShareCode] = useState<string | null>(null);
   const { createShare, isCreating } = useCreateShare();
 
   useEffect(() => {
-    setLastShareCode(localStorage.getItem("lastShareCode"));
+    const code = localStorage.getItem("lastShareCode");
+    if (code) {
+      const checkCode = async () => {
+        try {
+          const docRef = doc(db, "shares", code);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const expiresAt = data.expiresAt?.toMillis() || 0;
+            if (expiresAt > Date.now()) {
+              setLastShareCode(code);
+            } else {
+              localStorage.removeItem("lastShareCode");
+            }
+          } else {
+            localStorage.removeItem("lastShareCode");
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      checkCode();
+    }
   }, []);
 
   return (
@@ -59,7 +83,7 @@ export default function Home() {
               href={`/${lastShareCode}`}
               className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors underline-offset-4 hover:underline"
             >
-              Continue your last share: anyshare.app/{lastShareCode}
+              ↩ Continue last share
             </Link>
           )}
         </div>

@@ -2,9 +2,8 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, Timestamp } from "firebase/firestore";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
-import { useAuth } from "@/contexts/AuthContext";
 import { QRCodeSVG } from "qrcode.react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +15,7 @@ import {
   File as FileIcon, FileType2, Mic, Square, Download, 
   Play, Pause, Loader2
 } from "lucide-react";
-import { toast } from "sonner";
+import toast from "react-hot-toast";
 import { formatDistanceToNowStrict } from "date-fns";
 
 type ShareItem = {
@@ -38,7 +37,7 @@ type ShareDoc = {
 
 export default function SharePage({ params }: { params: { code: string } }) {
   const { code } = params;
-  const { user } = useAuth();
+  const sessionId = typeof window !== "undefined" ? localStorage.getItem("anyshare_session_id") : null;
   
   const [shareDoc, setShareDoc] = useState<ShareDoc | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,8 +68,14 @@ export default function SharePage({ params }: { params: { code: string } }) {
       doc(db, "shares", code),
       (docSnap) => {
         if (docSnap.exists()) {
-          setShareDoc(docSnap.data() as ShareDoc);
-          setError(false);
+          const data = docSnap.data() as ShareDoc;
+          if (data.expiresAt.toMillis() < Date.now()) {
+            toast.error("⚠ Share expired");
+            setError(true);
+          } else {
+            setShareDoc(data);
+            setError(false);
+          }
         } else {
           setError(true);
         }
@@ -78,6 +83,7 @@ export default function SharePage({ params }: { params: { code: string } }) {
       },
       (err) => {
         console.error(err);
+        toast.error("⚠ Something went wrong");
         setError(true);
         setLoading(false);
       }
@@ -168,6 +174,14 @@ export default function SharePage({ params }: { params: { code: string } }) {
       await updateDoc(doc(db, "shares", code), {
         items: arrayRemove(item)
       });
+      if (item.storageUrl) {
+        try {
+          const storageRef = ref(storage, item.storageUrl);
+          await deleteObject(storageRef);
+        } catch (e) {
+          console.error("Failed to delete from storage", e);
+        }
+      }
       toast.success("Item deleted");
     } catch (err) {
       console.error(err);
@@ -195,6 +209,10 @@ export default function SharePage({ params }: { params: { code: string } }) {
 
   const handleAddImage = async () => {
     if (!selectedFile) return;
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      toast.error("⚠ File too large! Max 10MB allowed");
+      return;
+    }
     setIsUploading(true);
     
     // 900KB limit for base64
@@ -217,6 +235,10 @@ export default function SharePage({ params }: { params: { code: string } }) {
 
   const handleAddDocument = async (type: "pdf" | "doc") => {
     if (!selectedFile) return;
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      toast.error("⚠ File too large! Max 10MB allowed");
+      return;
+    }
     setIsUploading(true);
     try {
       const url = await uploadToStorage(selectedFile, type, selectedFile.name.split('.').pop() || 'file');
@@ -279,9 +301,16 @@ export default function SharePage({ params }: { params: { code: string } }) {
   };
 
   if (loading) return <div className="flex-1 flex items-center justify-center min-h-screen"><Loader2 className="w-8 h-8 animate-spin" /></div>;
-  if (error || !shareDoc) return <div className="flex-1 flex items-center justify-center min-h-screen"><p>Share not found or expired.</p></div>;
+  if (error || !shareDoc) return (
+    <div className="flex-1 flex flex-col items-center justify-center min-h-screen space-y-4">
+      <p className="text-xl text-muted-foreground font-medium">Share not found or expired.</p>
+      <Button asChild>
+        <a href="/">Create New Share</a>
+      </Button>
+    </div>
+  );
 
-  const isOwner = user?.uid === shareDoc.ownerId;
+  const isOwner = sessionId === shareDoc.ownerId;
   const items = [...shareDoc.items].sort((a, b) => b.addedAt - a.addedAt);
 
   return (

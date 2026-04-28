@@ -130,9 +130,9 @@ export default function SharePage({ params }: { params: { code: string } }) {
     toast.success("Copied to clipboard!");
   };
 
-  const uploadPendingItem = (pendingId: string, file: File | Blob, type: "pdf" | "doc" | "voice", extension: string, originalFileName: string) => {
+  const uploadPendingItem = (tempId: string, file: File | Blob, type: "pdf" | "doc" | "voice", extension: string, originalFileName: string) => {
     setPendingItems((prev) =>
-      prev.map((p) => (p.id === pendingId ? { ...p, status: "uploading", progress: 0 } : p))
+      prev.map((item) => (item.id === tempId ? { ...item, status: "uploading", progress: 0 } : item))
     );
 
     const storageFileName = `${code}/${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
@@ -144,13 +144,15 @@ export default function SharePage({ params }: { params: { code: string } }) {
       (snapshot) => {
         const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
         setPendingItems((prev) =>
-          prev.map((p) => (p.id === pendingId ? { ...p, progress } : p))
+          prev.map((item) =>
+            item.id === tempId ? { ...item, progress: Math.round(progress) } : item
+          )
         );
       },
       (error) => {
         console.error(error);
         setPendingItems((prev) =>
-          prev.map((p) => (p.id === pendingId ? { ...p, status: "error" } : p))
+          prev.map((item) => (item.id === tempId ? { ...item, status: "error" } : item))
         );
       },
       async () => {
@@ -168,11 +170,11 @@ export default function SharePage({ params }: { params: { code: string } }) {
           await updateDoc(doc(db, "shares", code), {
             items: arrayUnion(newItem)
           });
-          setPendingItems((prev) => prev.filter((p) => p.id !== pendingId));
+          setPendingItems((prev) => prev.filter((item) => item.id !== tempId));
         } catch (err) {
           console.error(err);
           setPendingItems((prev) =>
-            prev.map((p) => (p.id === pendingId ? { ...p, status: "error" } : p))
+            prev.map((item) => (item.id === tempId ? { ...item, status: "error" } : item))
           );
         }
       }
@@ -302,15 +304,15 @@ export default function SharePage({ params }: { params: { code: string } }) {
     
     const file = selectedFile;
     const extension = file.name.split('.').pop() || 'file';
-    const pendingId = crypto.randomUUID();
+    const tempId = crypto.randomUUID();
     
     setPendingItems((prev) => [
-      { id: pendingId, type, fileName: file.name, progress: 0, status: "uploading", file, extension },
+      { id: tempId, type, fileName: file.name, progress: 0, status: "uploading", file, extension },
       ...prev
     ]);
     setSelectedFile(null);
 
-    uploadPendingItem(pendingId, file, type, extension, file.name);
+    uploadPendingItem(tempId, file, type, extension, file.name);
   };
 
   const startRecording = async () => {
@@ -328,14 +330,14 @@ export default function SharePage({ params }: { params: { code: string } }) {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         stream.getTracks().forEach(track => track.stop());
         
-        const pendingId = crypto.randomUUID();
+        const tempId = crypto.randomUUID();
         setPendingItems((prev) => [
-          { id: pendingId, type: "voice", fileName: "Voice Note", progress: 0, status: "uploading", file: audioBlob, extension: "webm" },
+          { id: tempId, type: "voice", fileName: "Voice Note", progress: 0, status: "uploading", file: audioBlob, extension: "webm" },
           ...prev
         ]);
         setRecordingTime(0);
 
-        uploadPendingItem(pendingId, audioBlob, "voice", "webm", "Voice Note");
+        uploadPendingItem(tempId, audioBlob, "voice", "webm", "Voice Note");
       };
 
       mediaRecorder.start();

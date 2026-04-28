@@ -35,6 +35,16 @@ type ShareDoc = {
   items: ShareItem[];
 };
 
+type PendingItem = {
+  id: string;
+  type: "pdf" | "doc" | "voice";
+  fileName: string;
+  progress: number;
+  status: "uploading" | "error";
+  file: File | Blob;
+  extension: string;
+};
+
 export default function SharePage({ params }: { params: { code: string } }) {
   const { code } = params;
   const sessionId = typeof window !== "undefined" ? localStorage.getItem("anyshare_session_id") : null;
@@ -48,6 +58,7 @@ export default function SharePage({ params }: { params: { code: string } }) {
   const [activeTab, setActiveTab] = useState("text");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
 
   // Text State
   const [textContent, setTextContent] = useState("");
@@ -117,6 +128,55 @@ export default function SharePage({ params }: { params: { code: string } }) {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Copied to clipboard!");
+  };
+
+  const uploadPendingItem = (pendingId: string, file: File | Blob, type: "pdf" | "doc" | "voice", extension: string, originalFileName: string) => {
+    setPendingItems((prev) =>
+      prev.map((p) => (p.id === pendingId ? { ...p, status: "uploading", progress: 0 } : p))
+    );
+
+    const storageFileName = `${code}/${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
+    const storageRef = ref(storage, storageFileName);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setPendingItems((prev) =>
+          prev.map((p) => (p.id === pendingId ? { ...p, progress } : p))
+        );
+      },
+      (error) => {
+        console.error(error);
+        setPendingItems((prev) =>
+          prev.map((p) => (p.id === pendingId ? { ...p, status: "error" } : p))
+        );
+      },
+      async () => {
+        try {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          const newItem: ShareItem = {
+            id: crypto.randomUUID(),
+            type,
+            storageUrl: downloadURL,
+            addedAt: Date.now(),
+          };
+          if (type !== "voice") {
+            newItem.fileName = originalFileName;
+          }
+          await updateDoc(doc(db, "shares", code), {
+            items: arrayUnion(newItem)
+          });
+          setPendingItems((prev) => prev.filter((p) => p.id !== pendingId));
+        } catch (err) {
+          console.error(err);
+          setPendingItems((prev) =>
+            prev.map((p) => (p.id === pendingId ? { ...p, status: "error" } : p))
+          );
+        }
+      }
+    );
   };
 
   const uploadToStorage = async (file: File | Blob, type: string, extension: string): Promise<string> => {
@@ -239,14 +299,18 @@ export default function SharePage({ params }: { params: { code: string } }) {
       toast.error("⚠ File too large! Max 10MB allowed");
       return;
     }
-    setIsUploading(true);
-    try {
-      const url = await uploadToStorage(selectedFile, type, selectedFile.name.split('.').pop() || 'file');
-      handleAddItem({ type, storageUrl: url, fileName: selectedFile.name });
-    } catch (err) {
-      setIsUploading(false);
-      toast.error("Upload failed");
-    }
+    
+    const file = selectedFile;
+    const extension = file.name.split('.').pop() || 'file';
+    const pendingId = crypto.randomUUID();
+    
+    setPendingItems((prev) => [
+      { id: pendingId, type, fileName: file.name, progress: 0, status: "uploading", file, extension },
+      ...prev
+    ]);
+    setSelectedFile(null);
+
+    uploadPendingItem(pendingId, file, type, extension, file.name);
   };
 
   const startRecording = async () => {
@@ -264,15 +328,14 @@ export default function SharePage({ params }: { params: { code: string } }) {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         stream.getTracks().forEach(track => track.stop());
         
-        setIsUploading(true);
-        try {
-          const url = await uploadToStorage(audioBlob, "voice", "webm");
-          handleAddItem({ type: "voice", storageUrl: url });
-        } catch (err) {
-          setIsUploading(false);
-          toast.error("Failed to upload voice note");
-        }
+        const pendingId = crypto.randomUUID();
+        setPendingItems((prev) => [
+          { id: pendingId, type: "voice", fileName: "Voice Note", progress: 0, status: "uploading", file: audioBlob, extension: "webm" },
+          ...prev
+        ]);
         setRecordingTime(0);
+
+        uploadPendingItem(pendingId, audioBlob, "voice", "webm", "Voice Note");
       };
 
       mediaRecorder.start();
@@ -453,11 +516,57 @@ export default function SharePage({ params }: { params: { code: string } }) {
           {/* Right Panel - Shared Items Feed */}
           <div className="lg:col-span-7 space-y-4">
             <h2 className="text-xl font-semibold flex items-center gap-2">
-              Shared Items <span className="bg-primary/10 text-primary text-sm py-0.5 px-2 rounded-full">{items.length}</span>
+              Shared Items <span className="bg-primary/10 text-primary text-sm py-0.5 px-2 rounded-full">{items.length + pendingItems.length}</span>
             </h2>
             
             <div className="space-y-4">
-              {items.length === 0 ? (
+              {pendingItems.map((pending) => (
+                <Card key={pending.id} className="group relative overflow-hidden shadow-sm border-primary/50">
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0 space-y-3">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
+                          {pending.type === "pdf" && <FileIcon className="w-4 h-4" />}
+                          {pending.type === "doc" && <FileType2 className="w-4 h-4" />}
+                          {pending.type === "voice" && <Mic className="w-4 h-4" />}
+                          {pending.type === "voice" ? "Voice Note" : `${pending.type.toUpperCase()} Document`}
+                          {pending.status === "uploading" && <Loader2 className="w-3 h-3 animate-spin ml-2" />}
+                        </div>
+                        <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-lg">
+                          <div className="p-3 bg-background rounded-lg shadow-sm">
+                            {pending.type === "pdf" && <FileIcon className="w-6 h-6 text-red-500 opacity-50" />}
+                            {pending.type === "doc" && <FileType2 className="w-6 h-6 text-blue-500 opacity-50" />}
+                            {pending.type === "voice" && <Mic className="w-6 h-6 text-green-500 opacity-50" />}
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <span className="font-medium truncate block">{pending.fileName}</span>
+                            <div className="flex items-center gap-3">
+                              <Progress value={pending.progress} className="h-2 flex-1" />
+                              <span className="text-xs text-muted-foreground min-w-[3ch]">{Math.round(pending.progress)}%</span>
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {pending.status === "uploading" ? "uploading..." : "Upload failed"}
+                            </span>
+                          </div>
+                        </div>
+                        {pending.status === "error" && (
+                          <div className="flex gap-2 mt-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => uploadPendingItem(pending.id, pending.file, pending.type, pending.extension, pending.fileName)}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+
+              {items.length === 0 && pendingItems.length === 0 ? (
                 <Card className="border-dashed bg-muted/20">
                   <CardContent className="p-12 flex flex-col items-center justify-center text-center space-y-3 text-muted-foreground">
                     <div className="p-4 bg-muted rounded-full">

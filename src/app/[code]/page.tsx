@@ -45,6 +45,8 @@ type PendingItem = {
   extension: string;
 };
 
+
+
 export default function SharePage({ params }: { params: { code: string } }) {
   const { code } = params;
   const sessionId = typeof window !== "undefined" ? localStorage.getItem("anyshare_session_id") : null;
@@ -73,6 +75,16 @@ export default function SharePage({ params }: { params: { code: string } }) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Upload Progress Polling Refs
+  const uploadProgressRef = useRef<Record<string, number>>({});
+  const intervals = useRef<Record<string, NodeJS.Timeout>>({});
+
+  useEffect(() => {
+    return () => {
+      Object.values(intervals.current).forEach(clearInterval);
+    };
+  }, []);
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -130,52 +142,78 @@ export default function SharePage({ params }: { params: { code: string } }) {
     toast.success("Copied to clipboard!");
   };
 
-  const uploadPendingItem = (tempId: string, file: File | Blob, type: "pdf" | "doc" | "voice", extension: string, originalFileName: string) => {
+  const uploadPendingItem = async (tempId: string, file: File | Blob, type: "pdf" | "doc" | "voice", extension: string, originalFileName: string) => {
     setPendingItems((prev) =>
       prev.map((item) => (item.id === tempId ? { ...item, status: "uploading", progress: 0 } : item))
     );
 
-    const storageFileName = `${code}/${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
-    const storageRef = ref(storage, storageFileName);
+    const storagePath = `shares/${code}/${Date.now()}_${originalFileName}`;
+    const storageRef = ref(storage, storagePath);
     const uploadTask = uploadBytesResumable(storageRef, file);
+
+    intervals.current[tempId] = setInterval(() => {
+      const currentProgress = uploadProgressRef.current[tempId];
+      if (currentProgress !== undefined) {
+        setPendingItems(prev => prev.map(item =>
+          item.id === tempId 
+            ? { ...item, progress: currentProgress } 
+            : item
+        ));
+      }
+    }, 300);
 
     uploadTask.on(
       "state_changed",
       (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        setPendingItems((prev) =>
-          prev.map((item) =>
-            item.id === tempId ? { ...item, progress: Math.round(progress) } : item
-          )
+        const percent = Math.round(
+          (snapshot.bytesTransferred / snapshot.totalBytes) * 100
         );
+        uploadProgressRef.current[tempId] = percent;
       },
       (error) => {
+        clearInterval(intervals.current[tempId]);
+        delete uploadProgressRef.current[tempId];
+        delete intervals.current[tempId];
+
         console.error(error);
         setPendingItems((prev) =>
           prev.map((item) => (item.id === tempId ? { ...item, status: "error" } : item))
         );
+        toast.error("⚠ Upload failed");
       },
       async () => {
         try {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          clearInterval(intervals.current[tempId]);
+          delete uploadProgressRef.current[tempId];
+          delete intervals.current[tempId];
+
           const newItem: ShareItem = {
-            id: crypto.randomUUID(),
+            id: tempId,
             type,
-            storageUrl: downloadURL,
+            storageUrl: url,
             addedAt: Date.now(),
           };
           if (type !== "voice") {
             newItem.fileName = originalFileName;
           }
+
           await updateDoc(doc(db, "shares", code), {
             items: arrayUnion(newItem)
           });
+
           setPendingItems((prev) => prev.filter((item) => item.id !== tempId));
+          toast.success("✓ Item added!");
         } catch (err) {
+          clearInterval(intervals.current[tempId]);
+          delete uploadProgressRef.current[tempId];
+          delete intervals.current[tempId];
+
           console.error(err);
           setPendingItems((prev) =>
             prev.map((item) => (item.id === tempId ? { ...item, status: "error" } : item))
           );
+          toast.error("⚠ Upload failed");
         }
       }
     );

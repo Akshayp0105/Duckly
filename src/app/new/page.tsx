@@ -2,19 +2,17 @@
 
 import { useEffect, useRef } from "react"
 import { useCreateShare } from "@/hooks/useCreateShare"
-import { useAuth } from "@/contexts/AuthContext"
 
 export default function NewShare() {
   const { createShare } = useCreateShare()
-  const { user, loading } = useAuth()
   const hasCreated = useRef(false)
 
   useEffect(() => {
-    if (!loading && user && !hasCreated.current) {
+    if (!hasCreated.current) {
       hasCreated.current = true
       createShare()
     }
-  }, [loading, user, createShare])
+  }, [createShare])
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-6">

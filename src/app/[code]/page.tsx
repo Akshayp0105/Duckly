@@ -5,18 +5,16 @@ import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, Timestamp } from "
 import { db } from "@/lib/firebase";
 import { QRCodeSVG } from "qrcode.react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { 
-  Copy, Trash2, FileText, Image as ImageIcon, 
+  Copy, FileText, Image as ImageIcon, 
   File as FileIcon, FileType2, Mic, Square, Download, 
-  Play, Pause, Loader2, X, Layers
+  Play, Loader2, X, Layers
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { formatDistanceToNowStrict } from "date-fns";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 type ShareItem = {
   id: string;
@@ -194,7 +192,7 @@ export default function SharePage({ params }: { params: { code: string } }) {
     try {
       const newItem: ShareItem = {
         ...itemData,
-        id: crypto.randomUUID(),
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36),
         addedAt: Date.now(),
       };
       await updateDoc(doc(db, "shares", code), {
@@ -269,7 +267,7 @@ export default function SharePage({ params }: { params: { code: string } }) {
     }
     
     const file = selectedFile;
-    const tempId = crypto.randomUUID();
+    const tempId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
     
     setPendingItems((prev) => [
       { id: tempId, type, fileName: file.name, status: "converting", file },
@@ -324,7 +322,7 @@ export default function SharePage({ params }: { params: { code: string } }) {
 
   const handleAddVoiceNote = () => {
     if (!voiceBlob) return;
-    const tempId = crypto.randomUUID();
+    const tempId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
     setPendingItems((prev) => [
       { id: tempId, type: "voice", fileName: "Voice Note", status: "converting", file: voiceBlob },
       ...prev
@@ -345,9 +343,9 @@ export default function SharePage({ params }: { params: { code: string } }) {
   if (error || !shareDoc) return (
     <div className="flex-1 flex flex-col items-center justify-center min-h-screen space-y-4">
       <p className="text-xl text-muted-foreground font-medium">Share not found or expired.</p>
-      <Button asChild>
-        <a href="/">Create New Share</a>
-      </Button>
+      <Link href="/">
+        <Button>Create New Share</Button>
+      </Link>
     </div>
   );
 

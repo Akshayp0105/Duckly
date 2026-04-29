@@ -2,8 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove, Timestamp } from "firebase/firestore";
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { QRCodeSVG } from "qrcode.react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,10 +38,8 @@ type PendingItem = {
   id: string;
   type: "pdf" | "doc" | "voice";
   fileName: string;
-  progress: number;
-  status: "uploading" | "error";
+  status: "converting" | "error";
   file: File | Blob;
-  extension: string;
 };
 
 
@@ -76,15 +73,8 @@ export default function SharePage({ params }: { params: { code: string } }) {
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Upload Progress Polling Refs
-  const uploadProgressRef = useRef<Record<string, number>>({});
-  const intervals = useRef<Record<string, NodeJS.Timeout>>({});
+  // Upload Progress Polling Refs (Removed)
 
-  useEffect(() => {
-    return () => {
-      Object.values(intervals.current).forEach(clearInterval);
-    };
-  }, []);
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -142,104 +132,45 @@ export default function SharePage({ params }: { params: { code: string } }) {
     toast.success("Copied to clipboard!");
   };
 
-  const uploadPendingItem = async (tempId: string, file: File | Blob, type: "pdf" | "doc" | "voice", extension: string, originalFileName: string) => {
+  const toBase64 = (file: File | Blob): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (err) => reject(err);
+  });
+
+  const uploadPendingItem = async (tempId: string, file: File | Blob, type: "pdf" | "doc" | "voice", originalFileName: string) => {
     setPendingItems((prev) =>
-      prev.map((item) => (item.id === tempId ? { ...item, status: "uploading", progress: 0 } : item))
+      prev.map((item) => (item.id === tempId ? { ...item, status: "converting" } : item))
     );
 
-    const storagePath = `shares/${code}/${Date.now()}_${originalFileName}`;
-    const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
-
-    intervals.current[tempId] = setInterval(() => {
-      const currentProgress = uploadProgressRef.current[tempId];
-      if (currentProgress !== undefined) {
-        setPendingItems(prev => prev.map(item =>
-          item.id === tempId 
-            ? { ...item, progress: currentProgress } 
-            : item
-        ));
+    try {
+      const base64 = await toBase64(file);
+      const newItem: ShareItem = {
+        id: tempId,
+        type,
+        content: base64,
+        addedAt: Date.now(),
+      };
+      if (type !== "voice") {
+        newItem.fileName = originalFileName;
+      } else {
+        newItem.fileName = originalFileName;
       }
-    }, 300);
 
-    uploadTask.on(
-      "state_changed",
-      (snapshot) => {
-        const percent = Math.round(
-          (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-        );
-        uploadProgressRef.current[tempId] = percent;
-      },
-      (error) => {
-        clearInterval(intervals.current[tempId]);
-        delete uploadProgressRef.current[tempId];
-        delete intervals.current[tempId];
+      await updateDoc(doc(db, "shares", code), {
+        items: arrayUnion(newItem)
+      });
 
-        console.error(error);
-        setPendingItems((prev) =>
-          prev.map((item) => (item.id === tempId ? { ...item, status: "error" } : item))
-        );
-        toast.error("⚠ Upload failed");
-      },
-      async () => {
-        try {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          clearInterval(intervals.current[tempId]);
-          delete uploadProgressRef.current[tempId];
-          delete intervals.current[tempId];
-
-          const newItem: ShareItem = {
-            id: tempId,
-            type,
-            storageUrl: url,
-            addedAt: Date.now(),
-          };
-          if (type !== "voice") {
-            newItem.fileName = originalFileName;
-          }
-
-          await updateDoc(doc(db, "shares", code), {
-            items: arrayUnion(newItem)
-          });
-
-          setPendingItems((prev) => prev.filter((item) => item.id !== tempId));
-          toast.success("✓ Item added!");
-        } catch (err) {
-          clearInterval(intervals.current[tempId]);
-          delete uploadProgressRef.current[tempId];
-          delete intervals.current[tempId];
-
-          console.error(err);
-          setPendingItems((prev) =>
-            prev.map((item) => (item.id === tempId ? { ...item, status: "error" } : item))
-          );
-          toast.error("⚠ Upload failed");
-        }
-      }
-    );
-  };
-
-  const uploadToStorage = async (file: File | Blob, type: string, extension: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const fileName = `${code}/${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
-      const storageRef = ref(storage, fileName);
-      const uploadTask = uploadBytesResumable(storageRef, file);
-
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(progress);
-        },
-        (error) => {
-          reject(error);
-        },
-        async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(downloadURL);
-        }
+      setPendingItems((prev) => prev.filter((item) => item.id !== tempId));
+      toast.success("✓ Item added!");
+    } catch (err) {
+      console.error(err);
+      setPendingItems((prev) =>
+        prev.map((item) => (item.id === tempId ? { ...item, status: "error" } : item))
       );
-    });
+      toast.error("⚠ Failed to add item");
+    }
   };
 
   const handleAddItem = async (itemData: Omit<ShareItem, "id" | "addedAt">) => {
@@ -274,14 +205,6 @@ export default function SharePage({ params }: { params: { code: string } }) {
       await updateDoc(doc(db, "shares", code), {
         items: arrayRemove(item)
       });
-      if (item.storageUrl) {
-        try {
-          const storageRef = ref(storage, item.storageUrl);
-          await deleteObject(storageRef);
-        } catch (e) {
-          console.error("Failed to delete from storage", e);
-        }
-      }
       toast.success("Item deleted");
     } catch (err) {
       console.error(err);
@@ -309,48 +232,36 @@ export default function SharePage({ params }: { params: { code: string } }) {
 
   const handleAddImage = async () => {
     if (!selectedFile) return;
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      toast.error("⚠ File too large! Max 10MB allowed");
+    if (selectedFile.size > 900 * 1024) {
+      toast.error("⚠ File too large. Max size is 900KB");
       return;
     }
     setIsUploading(true);
     
-    // 900KB limit for base64
-    if (selectedFile.size < 900 * 1024) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        handleAddItem({ type: "image", content: reader.result as string, fileName: selectedFile.name });
-      };
-      reader.readAsDataURL(selectedFile);
-    } else {
-      try {
-        const url = await uploadToStorage(selectedFile, "image", selectedFile.name.split('.').pop() || 'png');
-        handleAddItem({ type: "image", storageUrl: url, fileName: selectedFile.name });
-      } catch (err) {
-        setIsUploading(false);
-        toast.error("Upload failed");
-      }
-    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      handleAddItem({ type: "image", content: reader.result as string, fileName: selectedFile.name });
+    };
+    reader.readAsDataURL(selectedFile);
   };
 
   const handleAddDocument = async (type: "pdf" | "doc") => {
     if (!selectedFile) return;
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      toast.error("⚠ File too large! Max 10MB allowed");
+    if (selectedFile.size > 900 * 1024) {
+      toast.error("⚠ File too large. Max size is 900KB");
       return;
     }
     
     const file = selectedFile;
-    const extension = file.name.split('.').pop() || 'file';
     const tempId = crypto.randomUUID();
     
     setPendingItems((prev) => [
-      { id: tempId, type, fileName: file.name, progress: 0, status: "uploading", file, extension },
+      { id: tempId, type, fileName: file.name, status: "converting", file },
       ...prev
     ]);
     setSelectedFile(null);
 
-    uploadPendingItem(tempId, file, type, extension, file.name);
+    uploadPendingItem(tempId, file, type, file.name);
   };
 
   const startRecording = async () => {
@@ -368,14 +279,19 @@ export default function SharePage({ params }: { params: { code: string } }) {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         stream.getTracks().forEach(track => track.stop());
         
+        if (audioBlob.size > 900 * 1024) {
+          toast.error("⚠ File too large. Max size is 900KB");
+          return;
+        }
+
         const tempId = crypto.randomUUID();
         setPendingItems((prev) => [
-          { id: tempId, type: "voice", fileName: "Voice Note", progress: 0, status: "uploading", file: audioBlob, extension: "webm" },
+          { id: tempId, type: "voice", fileName: "Voice Note", status: "converting", file: audioBlob },
           ...prev
         ]);
         setRecordingTime(0);
 
-        uploadPendingItem(tempId, audioBlob, "voice", "webm", "Voice Note");
+        uploadPendingItem(tempId, audioBlob, "voice", "Voice Note");
       };
 
       mediaRecorder.start();
@@ -570,7 +486,7 @@ export default function SharePage({ params }: { params: { code: string } }) {
                           {pending.type === "doc" && <FileType2 className="w-4 h-4" />}
                           {pending.type === "voice" && <Mic className="w-4 h-4" />}
                           {pending.type === "voice" ? "Voice Note" : `${pending.type.toUpperCase()} Document`}
-                          {pending.status === "uploading" && <Loader2 className="w-3 h-3 animate-spin ml-2" />}
+                          {pending.status === "converting" && <Loader2 className="w-3 h-3 animate-spin ml-2" />}
                         </div>
                         <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-lg">
                           <div className="p-3 bg-background rounded-lg shadow-sm">
@@ -580,12 +496,12 @@ export default function SharePage({ params }: { params: { code: string } }) {
                           </div>
                           <div className="flex-1 min-w-0 space-y-2">
                             <span className="font-medium truncate block">{pending.fileName}</span>
-                            <div className="flex items-center gap-3">
-                              <Progress value={pending.progress} className="h-2 flex-1" />
-                              <span className="text-xs text-muted-foreground min-w-[3ch]">{Math.round(pending.progress)}%</span>
-                            </div>
-                            <span className="text-xs font-medium text-muted-foreground">
-                              {pending.status === "uploading" ? "uploading..." : "Upload failed"}
+                            <span className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                              {pending.status === "converting" ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" /> Processing...
+                                </>
+                              ) : "Failed"}
                             </span>
                           </div>
                         </div>
@@ -594,7 +510,7 @@ export default function SharePage({ params }: { params: { code: string } }) {
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              onClick={() => uploadPendingItem(pending.id, pending.file, pending.type, pending.extension, pending.fileName)}
+                              onClick={() => uploadPendingItem(pending.id, pending.file, pending.type, pending.fileName)}
                             >
                               Retry
                             </Button>
@@ -642,11 +558,11 @@ export default function SharePage({ params }: { params: { code: string } }) {
                                 <ImageIcon className="w-4 h-4" /> Image {item.fileName && `- ${item.fileName}`}
                               </div>
                               <div className="rounded-lg overflow-hidden border bg-muted/20">
-                                <img src={item.content || item.storageUrl} alt="Shared image" className="max-h-[300px] w-auto object-contain mx-auto" />
+                                <img src={item.content} alt="Shared image" className="max-h-[300px] w-auto object-contain mx-auto" />
                               </div>
                               <div className="flex gap-2">
                                 <Button variant="secondary" size="sm" asChild>
-                                  <a href={item.content || item.storageUrl} download={item.fileName || "image.png"} target="_blank" rel="noreferrer">
+                                  <a href={item.content} download={item.fileName || "image.png"} target="_blank" rel="noreferrer">
                                     <Download className="w-3 h-3 mr-2" /> Download
                                   </a>
                                 </Button>
@@ -668,10 +584,17 @@ export default function SharePage({ params }: { params: { code: string } }) {
                               </div>
                               <div className="flex gap-2">
                                 <Button variant="secondary" size="sm" asChild>
-                                  <a href={item.storageUrl} target="_blank" rel="noreferrer">
+                                  <a href={item.content} download={item.fileName}>
                                     <Download className="w-3 h-3 mr-2" /> Download
                                   </a>
                                 </Button>
+                                {item.type === "pdf" && (
+                                  <Button variant="secondary" size="sm" asChild>
+                                    <a href={item.content} target="_blank" rel="noreferrer">
+                                      <Play className="w-3 h-3 mr-2" /> Preview
+                                    </a>
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           )}
@@ -682,9 +605,10 @@ export default function SharePage({ params }: { params: { code: string } }) {
                                 <Mic className="w-4 h-4" /> Voice Note
                               </div>
                               <div className="bg-muted/30 p-4 rounded-lg">
-                                <audio controls className="w-full h-10" src={item.storageUrl}>
+                                <audio controls className="w-full h-10" src={item.content}>
                                   Your browser does not support the audio element.
                                 </audio>
+                                <div className="text-xs text-muted-foreground mt-2 text-center">{item.fileName}</div>
                               </div>
                             </div>
                           )}

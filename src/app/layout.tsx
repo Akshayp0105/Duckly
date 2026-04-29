@@ -10,7 +10,7 @@ import { Toaster } from "react-hot-toast";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Any Share",
+  title: "Duck Share",
   description: "Share anything, instantly. Files expire in 24 hours.",
 };
 
@@ -27,7 +27,7 @@ export default function RootLayout({
           defaultTheme="dark"
           themes={["dark", "gray", "white"]}
           enableSystem={false}
-          storageKey="anyshare-theme"
+          storageKey="duckshare-theme"
         >
           <Navbar />
           <main className="flex-1 flex flex-col">

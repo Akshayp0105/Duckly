@@ -40,7 +40,7 @@ export default function Home() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-6 lg:p-12 relative overflow-hidden">
       {/* Background decoration */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-800/20 via-background to-background pointer-events-none" />
       
       <div className="relative z-10 max-w-3xl w-full mx-auto text-center space-y-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm font-medium border shadow-sm">
@@ -71,7 +71,7 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  Create New Share
+                  Start Sharing
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </>
               )}
@@ -89,8 +89,8 @@ export default function Home() {
         </div>
 
         <div className="pt-24 grid grid-cols-1 md:grid-cols-2 gap-8 text-left max-w-2xl mx-auto">
-          <div className="bg-card text-card-foreground p-6 rounded-2xl border shadow-sm flex gap-4">
-            <div className="p-3 bg-primary/10 rounded-xl h-fit">
+          <div className="bg-card text-card-foreground p-6 rounded-2xl border shadow-sm flex gap-4 hover:shadow-md transition-shadow">
+            <div className="p-3 bg-primary/5 border rounded-xl h-fit">
               <Share2 className="w-6 h-6 text-primary" />
             </div>
             <div>
@@ -98,8 +98,8 @@ export default function Home() {
               <p className="text-muted-foreground mt-1">Share text snippets, images, PDFs, or voice notes flawlessly.</p>
             </div>
           </div>
-          <div className="bg-card text-card-foreground p-6 rounded-2xl border shadow-sm flex gap-4">
-            <div className="p-3 bg-primary/10 rounded-xl h-fit">
+          <div className="bg-card text-card-foreground p-6 rounded-2xl border shadow-sm flex gap-4 hover:shadow-md transition-shadow">
+            <div className="p-3 bg-primary/5 border rounded-xl h-fit">
               <Shield className="w-6 h-6 text-primary" />
             </div>
             <div>

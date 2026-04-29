@@ -30,10 +30,14 @@ export default function Navbar() {
             </Link>
           )}
           <Link href="/" className="font-bold text-xl tracking-tight flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary text-primary-foreground rounded-lg flex items-center justify-center font-black">
-              A
+            <div className="w-9 h-9 bg-foreground rounded-lg flex items-center justify-center shadow-sm overflow-hidden border border-border/50">
+              <img 
+                src="/duck.png" 
+                alt="Duck Logo" 
+                className="w-[120%] h-[120%] object-cover object-center invert dark:invert-0 mix-blend-screen dark:mix-blend-multiply opacity-90 scale-110"
+              />
             </div>
-            Any Share
+            Duck Share
           </Link>
         </div>
         

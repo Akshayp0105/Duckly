@@ -45,7 +45,7 @@ export default function Home() {
       <div className="relative z-10 max-w-3xl w-full mx-auto text-center space-y-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary text-secondary-foreground text-sm font-medium border shadow-sm">
           <Zap className="w-4 h-4 text-primary" />
-          <span>Lightning fast sharing</span>
+          <span>Powered by K Factory</span>
         </div>
         
         <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-balance bg-clip-text text-transparent bg-gradient-to-r from-foreground via-muted-foreground to-foreground animate-text-gradient pb-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Share2, Shield, Zap, Loader2 } from "lucide-react";
+import { ArrowRight, Share2, Shield, Zap, Loader2, History } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCreateShare } from "@/hooks/useCreateShare";
 import { doc, getDoc } from "firebase/firestore";
@@ -48,7 +48,7 @@ export default function Home() {
           <span>Lightning fast sharing</span>
         </div>
         
-        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-balance bg-clip-text text-transparent bg-gradient-to-r from-foreground to-muted-foreground pb-2">
+        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-balance bg-clip-text text-transparent bg-gradient-to-r from-foreground via-muted-foreground to-foreground animate-text-gradient pb-2">
           Share anything, <br className="hidden sm:block" /> instantly
         </h1>
         
@@ -81,9 +81,10 @@ export default function Home() {
           {lastShareCode && (
             <Link 
               href={`/${lastShareCode}`}
-              className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors underline-offset-4 hover:underline"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors underline-offset-4 hover:underline"
             >
-              ↩ Continue last share
+              <History className="w-4 h-4" />
+              Continue last share
             </Link>
           )}
         </div>

@@ -37,7 +37,7 @@ export default function Navbar() {
                 className="w-[120%] h-[120%] object-cover object-center invert dark:invert-0 mix-blend-screen dark:mix-blend-multiply opacity-90 scale-110"
               />
             </div>
-            Duck Share
+            Duckly
           </Link>
         </div>
         

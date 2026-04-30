@@ -2,6 +2,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Duckly
 
+pdfs,docs,text sharing
 
 First, run the development server:
 

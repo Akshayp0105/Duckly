@@ -98,6 +98,11 @@ src/
 
 ---
 ## Screenshots
+<img width="1889" height="830" alt="image" src="https://github.com/user-attachments/assets/f796363b-92d7-4403-ae97-56f0efdd42d1" />
+
+<img width="1892" height="838" alt="image" src="https://github.com/user-attachments/assets/04723dab-eed7-473d-8322-1f0cc31559d2" />
+
+<img width="1874" height="847" alt="image" src="https://github.com/user-attachments/assets/83df7854-d16d-4d30-a45a-b2226b92b40e" />
 
 ## 🔥 Key Highlights
 

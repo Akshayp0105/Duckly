@@ -136,7 +136,7 @@ src/
 
 ## 🤝 Contributing
 
-Contributions are welcome! Feel free to fork the repo and submit a PR.
+Contributions are welcome🔥! Feel free to fork the repo and submit a PR.
 
 ---
 
